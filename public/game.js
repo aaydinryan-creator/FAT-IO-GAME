@@ -24,15 +24,31 @@ let toastTimer = null;
 let worldBuilt = false;
 let scoreBadge;
 
-let audioCtx = null;
-let musicStarted = false;
-let musicInterval = null;
-let musicStep = 0;
-
 let joystickActive = false;
 let joystickTouchId = null;
 let joystickVector = { x: 0, y: 0 };
 const joystickMaxRadius = 42;
+
+// AUDIO
+let audioUnlocked = false;
+let currentMusicIndex = 0;
+let currentMusic = null;
+
+const musicTracks = [
+    "/audio/bg1.mp3",
+    "/audio/bg2.mp3",
+    "/audio/bg3.mp3"
+];
+
+const sfx = {
+    burp: new Audio("/audio/burp.mp3"),
+    eat: new Audio("/audio/eat.mp3"),
+    fatVoice: new Audio("/audio/fat-voice.mp3")
+};
+
+for (const key in sfx) {
+    sfx[key].preload = "auto";
+}
 
 const menu = document.getElementById("menu");
 const menuFoodBg = document.getElementById("menuFoodBg");
@@ -171,6 +187,7 @@ function create() {
     socket.on("eliminated", (data) => {
         joined = false;
         resetJoystick();
+        playSfx("burp", 0.7);
         showToast("DAMN YOU ARE FAT");
         deathText.textContent = `${data.by || "Somebody"} turned you into a combo meal.`;
         deathScreen.style.display = "flex";
@@ -178,6 +195,7 @@ function create() {
     });
 
     socket.on("burgerTime", () => {
+        playSfx("eat", 0.45);
         showToast("BURGER TIMEEE");
     });
 }
@@ -225,9 +243,60 @@ function updatePreview() {
     previewName.textContent = name;
 }
 
+function unlockAudio() {
+    if (audioUnlocked) return;
+    audioUnlocked = true;
+
+    // tiny play/pause cycle to satisfy browser gesture rules
+    for (const key in sfx) {
+        sfx[key].volume = 0;
+        sfx[key].play().then(() => {
+            sfx[key].pause();
+            sfx[key].currentTime = 0;
+            sfx[key].volume = 1;
+        }).catch(() => {});
+    }
+}
+
+function playMusic() {
+    if (!audioUnlocked) return;
+    if (currentMusic) return;
+
+    currentMusic = new Audio(musicTracks[currentMusicIndex]);
+    currentMusic.volume = 0.22;
+    currentMusic.preload = "auto";
+
+    currentMusic.addEventListener("ended", () => {
+        currentMusic = null;
+        currentMusicIndex = (currentMusicIndex + 1) % musicTracks.length;
+        playMusic();
+    });
+
+    currentMusic.play().catch(() => {});
+}
+
+function stopMusic() {
+    if (!currentMusic) return;
+    currentMusic.pause();
+    currentMusic.currentTime = 0;
+    currentMusic = null;
+}
+
+function playSfx(name, volume = 0.6) {
+    const sound = sfx[name];
+    if (!sound || !audioUnlocked) return;
+
+    sound.pause();
+    sound.currentTime = 0;
+    sound.volume = volume;
+    sound.play().catch(() => {});
+}
+
 function joinFromMenu() {
     const username = usernameInput.value.trim() || "PLAYER";
-    startMusic();
+
+    unlockAudio();
+    playMusic();
 
     socket.emit("joinGame", {
         username,
@@ -485,6 +554,7 @@ function syncPlayers() {
     const me = players[myId];
     if (me && me.size >= whaleSize && !whaleAnnounced) {
         whaleAnnounced = true;
+        playSfx("fatVoice", 0.9);
         showToast("WOW I AM FAT");
     }
 }
@@ -621,50 +691,4 @@ function updateCamera() {
 
     cam.scrollX = Phaser.Math.Linear(cam.scrollX, targetX, 0.12);
     cam.scrollY = Phaser.Math.Linear(cam.scrollY, targetY, 0.12);
-}
-
-function startMusic() {
-    if (musicStarted) return;
-
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) return;
-
-    audioCtx = new AudioContextClass();
-    musicStarted = true;
-    musicStep = 0;
-
-    const bassPattern = [65.41, null, 65.41, 98.0, 73.42, null, 73.42, 110.0];
-
-    musicInterval = setInterval(() => {
-        if (!audioCtx) return;
-
-        const now = audioCtx.currentTime + 0.02;
-        const bass = bassPattern[musicStep % bassPattern.length];
-
-        if (bass) {
-            playNote(bass, 0.26, "sawtooth", 0.045, now);
-        }
-
-        playNote(131.0, 0.1, "triangle", 0.02, now + 0.07);
-
-        musicStep++;
-    }, 330);
-}
-
-function playNote(freq, duration, type, volume, when) {
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, when);
-
-    gain.gain.setValueAtTime(0.0001, when);
-    gain.gain.linearRampToValueAtTime(volume, when + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
-
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-
-    osc.start(when);
-    osc.stop(when + duration + 0.02);
 }
