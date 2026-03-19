@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fat IO Game</title>
+
+    <style>
+        :root {
+            --red: #d7261e;
+            --yellow: #ffcc29;
+            --brown: #4c2417;
+            --cream: #fff3cf;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            touch-action: none;
+            font-family: Impact, Haettenschweiler, "Arial Black", sans-serif;
+            background:
+                radial-gradient(circle at top, #7a2f19 0%, #4f1f11 35%, #26130e 100%);
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #menu {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background:
+                radial-gradient(circle at top, rgba(255, 153, 0, 0.18), transparent 35%),
+                rgba(12, 8, 6, 0.74);
+            z-index: 20;
+            overflow: hidden;
+        }
+
+        #menuFoodBg {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .menuFood {
+            position: absolute;
+            opacity: 0.14;
+            user-select: none;
+            transform: rotate(var(--rot));
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.35));
+        }
+
+        #menuCard {
+            position: relative;
+            width: min(94vw, 520px);
+            max-height: 92vh;
+            overflow: auto;
+            padding: 28px 28px 24px;
+            background: linear-gradient(180deg, #3a302d 0%, #2a2422 100%);
+            border: 4px solid #5e4f48;
+            border-radius: 24px;
+            color: white;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.45);
+            text-align: center;
+            z-index: 2;
+        }
+
+        #gameTitle {
+            margin: 0 0 10px;
+            font-size: clamp(30px, 5vw, 46px);
+            line-height: 0.95;
+            letter-spacing: 1px;
+            color: var(--red);
+            text-shadow:
+                -3px -3px 0 var(--yellow),
+                3px -3px 0 var(--yellow),
+                -3px 3px 0 var(--yellow),
+                3px 3px 0 var(--yellow),
+                0 7px 18px rgba(0,0,0,0.35);
+        }
+
+        #subtitle {
+            margin: 0 0 18px;
+            font-family: Arial, sans-serif;
+            font-weight: 700;
+            color: #f3dca9;
+            opacity: 0.95;
+        }
+
+        #username {
+            width: 100%;
+            padding: 14px 16px;
+            border: none;
+            border-radius: 14px;
+            font-size: 22px;
+            text-transform: uppercase;
+            margin-bottom: 18px;
+            outline: none;
+            background: #f7f0e8;
+            color: #2c1a15;
+            font-family: Arial, sans-serif;
+            font-weight: 800;
+        }
+
+        .sectionLabel {
+            margin: 14px 0 8px;
+            text-align: left;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            font-weight: 900;
+            letter-spacing: 1px;
+            color: #ffd98d;
+        }
+
+        .pickerGrid {
+            display: grid;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        #hatPicker {
+            grid-template-columns: repeat(4, 1fr);
+        }
+
+        #facePicker {
+            grid-template-columns: repeat(4, 1fr);
+        }
+
+        #accessoryPicker {
+            grid-template-columns: repeat(5, 1fr);
+        }
+
+        #colorPicker {
+            grid-template-columns: repeat(6, 1fr);
+        }
+
+        .pickBtn {
+            border: none;
+            border-radius: 14px;
+            padding: 12px 0;
+            cursor: pointer;
+            font-size: 28px;
+            background: #4a4645;
+            transition: transform 0.15s ease, background 0.15s ease, outline 0.15s ease;
+            min-height: 58px;
+        }
+
+        .pickBtn:hover {
+            transform: translateY(-2px);
+        }
+
+        .pickBtn.selected {
+            background: linear-gradient(180deg, #ffcf5a 0%, #f5a840 100%);
+            outline: 3px solid rgba(255, 232, 154, 0.7);
+        }
+
+        .colorBtn {
+            height: 52px;
+            min-height: 52px;
+            font-size: 0;
+            border: 3px solid rgba(255,255,255,0.18);
+        }
+
+        #previewCard {
+            margin: 8px 0 18px;
+            padding: 16px;
+            border-radius: 18px;
+            background: rgba(255,255,255,0.08);
+            border: 2px solid rgba(255,255,255,0.08);
+        }
+
+        #previewWrap {
+            position: relative;
+            width: 130px;
+            height: 140px;
+            margin: 0 auto;
+        }
+
+        #previewBody {
+            position: absolute;
+            left: 50%;
+            top: 58%;
+            width: 78px;
+            height: 78px;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            border: 4px solid rgba(0,0,0,0.28);
+            background: #ffcc4d;
+        }
+
+        #previewFace {
+            position: absolute;
+            left: 50%;
+            top: 58%;
+            transform: translate(-50%, -50%);
+            font-size: 44px;
+            line-height: 1;
+        }
+
+        #previewHat {
+            position: absolute;
+            left: 50%;
+            top: 16%;
+            transform: translateX(-50%);
+            font-size: 34px;
+            line-height: 1;
+        }
+
+        #previewAccessory {
+            position: absolute;
+            left: 50%;
+            top: 77%;
+            transform: translateX(-50%);
+            font-size: 28px;
+            line-height: 1;
+        }
+
+        #previewName {
+            margin-top: 8px;
+            font-family: Arial, sans-serif;
+            font-weight: 900;
+            color: #fff5d4;
+        }
+
+        #playBtn, #respawnBtn {
+            width: 100%;
+            border: none;
+            border-radius: 16px;
+            padding: 15px 18px;
+            cursor: pointer;
+            font-size: 24px;
+            color: #331708;
+            background: linear-gradient(180deg, #ffd466 0%, #f4a93d 100%);
+            box-shadow: inset 0 -4px 0 rgba(0,0,0,0.16);
+        }
+
+        #leaderboard {
+            position: absolute;
+            right: 18px;
+            top: 18px;
+            width: min(330px, 30vw);
+            min-width: 250px;
+            z-index: 12;
+            pointer-events: none;
+        }
+
+        .lb-card {
+            background: linear-gradient(180deg, #fff1b8 0%, #ffe07a 100%);
+            border: 5px solid #c8271e;
+            border-radius: 22px;
+            color: #63270f;
+            box-shadow: 0 12px 28px rgba(0,0,0,0.25);
+            overflow: hidden;
+        }
+
+        .lb-head {
+            background: linear-gradient(180deg, #d7261e 0%, #a81412 100%);
+            color: #ffd36a;
+            padding: 14px 16px 12px;
+            font-size: 26px;
+            letter-spacing: 1px;
+            text-align: center;
+            text-shadow: 0 2px 0 rgba(0,0,0,0.25);
+        }
+
+        .lb-sub {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            letter-spacing: 2px;
+            text-align: center;
+            padding: 5px 8px 8px;
+            color: #7b2d11;
+            font-weight: 800;
+        }
+
+        .lb-row {
+            display: grid;
+            grid-template-columns: 46px 1fr 76px;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            border-top: 2px dashed rgba(114, 48, 15, 0.28);
+            font-family: Arial, sans-serif;
+            font-weight: 900;
+            background: rgba(255,255,255,0.18);
+        }
+
+        .lb-rank {
+            color: #b51a14;
+            font-size: 24px;
+            text-align: center;
+            font-family: Impact, sans-serif;
+        }
+
+        .lb-name {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .lb-score {
+            text-align: right;
+            color: #5a2713;
+        }
+
+        #toast {
+            position: absolute;
+            left: 50%;
+            top: 90px;
+            transform: translateX(-50%) scale(0.9);
+            z-index: 18;
+            background: linear-gradient(180deg, #d7261e 0%, #a61713 100%);
+            color: #ffd96a;
+            border: 4px solid #ffd96a;
+            border-radius: 18px;
+            padding: 14px 22px;
+            font-size: clamp(26px, 3vw, 42px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.18s ease, transform 0.18s ease;
+            text-shadow: 0 3px 0 rgba(0,0,0,0.25);
+        }
+
+        #toast.show {
+            opacity: 1;
+            transform: translateX(-50%) scale(1);
+        }
+
+        #deathScreen {
+            position: absolute;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(10, 7, 6, 0.72);
+            z-index: 30;
+        }
+
+        #deathCard {
+            width: min(92vw, 420px);
+            padding: 28px 24px 22px;
+            text-align: center;
+            border-radius: 22px;
+            background: linear-gradient(180deg, #3a302d 0%, #241d1a 100%);
+            border: 4px solid #6b5a52;
+            color: white;
+            box-shadow: 0 18px 40px rgba(0,0,0,0.45);
+        }
+
+        #deathTitle {
+            font-size: clamp(28px, 4vw, 42px);
+            margin: 0 0 10px;
+            color: #ffcf5f;
+            text-shadow: 0 4px 0 rgba(0,0,0,0.22);
+        }
+
+        #deathText {
+            font-family: Arial, sans-serif;
+            font-size: 18px;
+            color: #f1e3d7;
+            margin: 0 0 18px;
+            font-weight: 800;
+        }
+
+        #scoreBadge {
+            position: absolute;
+            left: 16px;
+            top: 16px;
+            z-index: 12;
+            pointer-events: none;
+            background: rgba(44, 18, 9, 0.7);
+            border: 3px solid rgba(255, 206, 92, 0.7);
+            border-radius: 16px;
+            padding: 10px 14px;
+            color: #ffdf81;
+            font-family: Arial, sans-serif;
+            font-weight: 900;
+            font-size: 18px;
+            letter-spacing: 0.5px;
+        }
+
+        #joystick {
+            position: absolute;
+            left: 18px;
+            bottom: 18px;
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: rgba(255, 218, 122, 0.16);
+            border: 3px solid rgba(255, 214, 112, 0.45);
+            z-index: 16;
+            display: none;
+            touch-action: none;
+        }
+
+        #joystickKnob {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 182, 66, 0.95);
+            border: 3px solid rgba(88, 33, 12, 0.7);
+            box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+        }
+
+        @media (pointer: coarse) {
+            #joystick {
+                display: block;
+            }
+
+            #leaderboard {
+                width: min(240px, 48vw);
+                min-width: 0;
+                right: 10px;
+                top: 10px;
+            }
+
+            .lb-head {
+                font-size: 20px;
+            }
+
+            .lb-sub {
+                font-size: 10px;
+                letter-spacing: 1px;
+            }
+
+            .lb-row {
+                grid-template-columns: 34px 1fr 56px;
+                gap: 6px;
+                padding: 8px 10px;
+                font-size: 13px;
+            }
+
+            .lb-rank {
+                font-size: 18px;
+            }
+
+            #scoreBadge {
+                top: auto;
+                left: 12px;
+                bottom: 170px;
+                font-size: 15px;
+                padding: 8px 11px;
+            }
+
+            #toast {
+                top: 20px;
+                width: calc(100vw - 28px);
+                max-width: 520px;
+                text-align: center;
+                font-size: 24px;
+            }
+
+            #menuCard {
+                padding: 22px 18px 18px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="scoreBadge">Score: 0 | Size: 30</div>
+
+    <div id="leaderboard"></div>
+
+    <div id="toast"></div>
+
+    <div id="joystick">
+        <div id="joystickKnob"></div>
+    </div>
+
+    <div id="menu">
+        <div id="menuFoodBg"></div>
+
+        <div id="menuCard">
+            <h1 id="gameTitle">WELCOME<br />FOOT FOOOOOOK</h1>
+            <p id="subtitle">Pull up, bulk up, and embarrass your family.</p>
+
+            <input id="username" type="text" maxlength="14" placeholder="BIGBACKJIMMY" />
+
+            <div id="previewCard">
+                <div id="previewWrap">
+                    <div id="previewHat">🧢</div>
+                    <div id="previewBody"></div>
+                    <div id="previewFace">😐</div>
+                    <div id="previewAccessory"></div>
+                </div>
+                <div id="previewName">PLAYER</div>
+            </div>
+
+            <div class="sectionLabel">HAT</div>
+            <div id="hatPicker" class="pickerGrid">
+                <button class="pickBtn hatBtn selected" data-hat="🧢">🧢</button>
+                <button class="pickBtn hatBtn" data-hat="🎩">🎩</button>
+                <button class="pickBtn hatBtn" data-hat="🎓">🎓</button>
+                <button class="pickBtn hatBtn" data-hat="👒">👒</button>
+            </div>
+
+            <div class="sectionLabel">FACE</div>
+            <div id="facePicker" class="pickerGrid">
+                <button class="pickBtn faceBtn selected" data-face="😐">😐</button>
+                <button class="pickBtn faceBtn" data-face="🙂">🙂</button>
+                <button class="pickBtn faceBtn" data-face="😋">😋</button>
+                <button class="pickBtn faceBtn" data-face="🥴">🥴</button>
+            </div>
+
+            <div class="sectionLabel">ACCESSORY</div>
+            <div id="accessoryPicker" class="pickerGrid">
+                <button class="pickBtn accessoryBtn selected" data-accessory="none">🚫</button>
+                <button class="pickBtn accessoryBtn" data-accessory="🕶️">🕶️</button>
+                <button class="pickBtn accessoryBtn" data-accessory="🥸">🥸</button>
+                <button class="pickBtn accessoryBtn" data-accessory="🥇">🥇</button>
+                <button class="pickBtn accessoryBtn" data-accessory="💎">💎</button>
+            </div>
+
+            <div class="sectionLabel">BODY COLOR</div>
+            <div id="colorPicker" class="pickerGrid">
+                <button class="pickBtn colorBtn selected" data-color="#ffcc4d" style="background:#ffcc4d;"></button>
+                <button class="pickBtn colorBtn" data-color="#ff7b7b" style="background:#ff7b7b;"></button>
+                <button class="pickBtn colorBtn" data-color="#7bdcff" style="background:#7bdcff;"></button>
+                <button class="pickBtn colorBtn" data-color="#8cff98" style="background:#8cff98;"></button>
+                <button class="pickBtn colorBtn" data-color="#d59cff" style="background:#d59cff;"></button>
+                <button class="pickBtn colorBtn" data-color="#ffffff" style="background:#ffffff;"></button>
+            </div>
+
+            <button id="playBtn">ENTER THE DRIVE THRU</button>
+        </div>
+    </div>
+
+    <div id="deathScreen">
+        <div id="deathCard">
+            <h2 id="deathTitle">DAMN YOU ARE FAT</h2>
+            <p id="deathText">You got rolled by somebody bigger.</p>
+            <button id="respawnBtn">RUN IT BACK</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
