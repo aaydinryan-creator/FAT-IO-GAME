@@ -29,26 +29,11 @@ let joystickTouchId = null;
 let joystickVector = { x: 0, y: 0 };
 const joystickMaxRadius = 42;
 
-// AUDIO
+// AUDIO - no files needed
 let audioUnlocked = false;
-let currentMusicIndex = 0;
-let currentMusic = null;
-
-const musicTracks = [
-    "/audio/bg1.mp3",
-    "/audio/bg2.mp3",
-    "/audio/bg3.mp3"
-];
-
-const sfx = {
-    burp: new Audio("/audio/burp.mp3"),
-    eat: new Audio("/audio/eat.mp3"),
-    fatVoice: new Audio("/audio/fat-voice.mp3")
-};
-
-for (const key in sfx) {
-    sfx[key].preload = "auto";
-}
+let audioCtx = null;
+let musicInterval = null;
+let currentMusicPattern = 0;
 
 const menu = document.getElementById("menu");
 const menuFoodBg = document.getElementById("menuFoodBg");
@@ -243,53 +228,191 @@ function updatePreview() {
     previewName.textContent = name;
 }
 
+// AUDIO HELPERS
 function unlockAudio() {
     if (audioUnlocked) return;
     audioUnlocked = true;
 
-    // tiny play/pause cycle to satisfy browser gesture rules
-    for (const key in sfx) {
-        sfx[key].volume = 0;
-        sfx[key].play().then(() => {
-            sfx[key].pause();
-            sfx[key].currentTime = 0;
-            sfx[key].volume = 1;
-        }).catch(() => {});
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) {
+        audioCtx = new AudioContextClass();
+        if (audioCtx.state === "suspended") {
+            audioCtx.resume().catch(() => {});
+        }
     }
 }
 
-function playMusic() {
+function speakFunnyLine(text) {
     if (!audioUnlocked) return;
-    if (currentMusic) return;
+    if (!("speechSynthesis" in window)) return;
 
-    currentMusic = new Audio(musicTracks[currentMusicIndex]);
-    currentMusic.volume = 0.22;
-    currentMusic.preload = "auto";
-
-    currentMusic.addEventListener("ended", () => {
-        currentMusic = null;
-        currentMusicIndex = (currentMusicIndex + 1) % musicTracks.length;
-        playMusic();
-    });
-
-    currentMusic.play().catch(() => {});
+    try {
+        window.speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.rate = 0.95;
+        utter.pitch = 0.7;
+        utter.volume = 0.9;
+        window.speechSynthesis.speak(utter);
+    } catch (e) {}
 }
 
-function stopMusic() {
-    if (!currentMusic) return;
-    currentMusic.pause();
-    currentMusic.currentTime = 0;
-    currentMusic = null;
+function playTone(freq = 440, duration = 0.12, type = "sine", volume = 0.05, startAt = 0) {
+    if (!audioCtx) return;
+
+    const now = audioCtx.currentTime + startAt;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, now);
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(volume, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.start(now);
+    osc.stop(now + duration + 0.02);
+}
+
+function playSlideTone(freqStart = 300, freqEnd = 120, duration = 0.3, type = "sawtooth", volume = 0.06) {
+    if (!audioCtx) return;
+
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(freqStart, now);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(40, freqEnd), now + duration);
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(volume, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.start(now);
+    osc.stop(now + duration + 0.03);
+}
+
+function playNoiseBurp() {
+    if (!audioCtx) return;
+
+    const bufferSize = audioCtx.sampleRate * 0.22;
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const output = buffer.getChannelData(0);
+
+    for (let i = 0; i < bufferSize; i++) {
+        output[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    }
+
+    const noise = audioCtx.createBufferSource();
+    const filter = audioCtx.createBiquadFilter();
+    const gain = audioCtx.createGain();
+
+    noise.buffer = buffer;
+    filter.type = "lowpass";
+    filter.frequency.value = 220;
+    gain.gain.value = 0.09;
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    noise.start();
+
+    playSlideTone(180, 70, 0.33, "sawtooth", 0.08);
+}
+
+function playEatSound(volume = 0.5) {
+    playTone(740, 0.06, "square", 0.03 * volume, 0);
+    playTone(980, 0.06, "square", 0.025 * volume, 0.07);
+    playTone(1240, 0.08, "triangle", 0.02 * volume, 0.13);
+}
+
+function playBurpSound(volume = 0.7) {
+    playNoiseBurp();
+    playSlideTone(240, 85, 0.38, "sawtooth", 0.08 * volume);
+}
+
+function playFatVoiceSound() {
+    speakFunnyLine("because I'm fat");
+}
+
+function playWhaleVoiceSound() {
+    speakFunnyLine("wow I am fat");
 }
 
 function playSfx(name, volume = 0.6) {
-    const sound = sfx[name];
-    if (!sound || !audioUnlocked) return;
+    if (!audioUnlocked) return;
 
-    sound.pause();
-    sound.currentTime = 0;
-    sound.volume = volume;
-    sound.play().catch(() => {});
+    if (audioCtx && audioCtx.state === "suspended") {
+        audioCtx.resume().catch(() => {});
+    }
+
+    switch (name) {
+        case "eat":
+            playEatSound(volume);
+            break;
+        case "burp":
+            playBurpSound(volume);
+            break;
+        case "fatVoice":
+            playFatVoiceSound();
+            break;
+        case "whaleVoice":
+            playWhaleVoiceSound();
+            break;
+    }
+}
+
+function playMusicPatternA() {
+    const notes = [196, 246.94, 293.66, 246.94, 196, 246.94, 329.63, 246.94];
+    notes.forEach((note, i) => {
+        playTone(note, 0.18, "triangle", 0.018, i * 0.24);
+        playTone(note / 2, 0.16, "sine", 0.01, i * 0.24);
+    });
+}
+
+function playMusicPatternB() {
+    const notes = [164.81, 220, 261.63, 220, 174.61, 220, 293.66, 220];
+    notes.forEach((note, i) => {
+        playTone(note, 0.18, "triangle", 0.018, i * 0.24);
+        playTone(note / 2, 0.16, "sine", 0.01, i * 0.24);
+    });
+}
+
+function playMusicPatternC() {
+    const notes = [220, 277.18, 329.63, 277.18, 246.94, 293.66, 369.99, 293.66];
+    notes.forEach((note, i) => {
+        playTone(note, 0.18, "triangle", 0.018, i * 0.24);
+        playTone(note / 2, 0.16, "sine", 0.01, i * 0.24);
+    });
+}
+
+function playMusic() {
+    if (!audioUnlocked || !audioCtx) return;
+    if (musicInterval) return;
+
+    const playCurrentPattern = () => {
+        if (currentMusicPattern === 0) playMusicPatternA();
+        if (currentMusicPattern === 1) playMusicPatternB();
+        if (currentMusicPattern === 2) playMusicPatternC();
+        currentMusicPattern = (currentMusicPattern + 1) % 3;
+    };
+
+    playCurrentPattern();
+    musicInterval = setInterval(playCurrentPattern, 2100);
+}
+
+function stopMusic() {
+    if (!musicInterval) return;
+    clearInterval(musicInterval);
+    musicInterval = null;
 }
 
 function joinFromMenu() {
@@ -297,6 +420,7 @@ function joinFromMenu() {
 
     unlockAudio();
     playMusic();
+    playSfx("eat", 0.5);
 
     socket.emit("joinGame", {
         username,
@@ -554,7 +678,7 @@ function syncPlayers() {
     const me = players[myId];
     if (me && me.size >= whaleSize && !whaleAnnounced) {
         whaleAnnounced = true;
-        playSfx("fatVoice", 0.9);
+        playSfx("whaleVoice", 0.9);
         showToast("WOW I AM FAT");
     }
 }
