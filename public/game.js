@@ -9,6 +9,7 @@ let foodSprites = {};
 let cursors;
 let wasdKeys;
 let sceneRef;
+let phaserGame;
 let myId = null;
 let joined = false;
 
@@ -112,7 +113,12 @@ const config = {
     scene: { preload, create, update }
 };
 
-new Phaser.Game(config);
+phaserGame = new Phaser.Game(config);
+
+window.addEventListener("resize", handleGameResize);
+document.addEventListener("fullscreenchange", () => {
+    setTimeout(handleGameResize, 60);
+});
 
 function preload() {
     this.load.image("weirdAl", "/images/weirdal.png");
@@ -126,11 +132,6 @@ function create() {
         left: Phaser.Input.Keyboard.KeyCodes.A,
         down: Phaser.Input.Keyboard.KeyCodes.S,
         right: Phaser.Input.Keyboard.KeyCodes.D
-    });
-
-    this.scale.on("resize", (gameSize) => {
-        const { width, height } = gameSize;
-        this.cameras.main.setSize(width, height);
     });
 
     socket.on("init", (data) => {
@@ -163,6 +164,7 @@ function create() {
         syncPlayers();
         renderLeaderboard();
         updateScoreBadge();
+        handleGameResize();
         updateCamera(true);
     });
 
@@ -232,6 +234,17 @@ function create() {
         showToast(randomFrom(burgerToasts));
         shakeCamera(80, 0.003);
     });
+}
+
+function handleGameResize() {
+    if (!phaserGame || !sceneRef) return;
+
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    phaserGame.scale.resize(width, height);
+    sceneRef.cameras.main.setSize(width, height);
+    updateCamera(true);
 }
 
 function setupCustomizationControls() {
