@@ -7,6 +7,7 @@ let leaderId = null;
 let playerSprites = {};
 let foodSprites = {};
 let cursors;
+let wasdKeys;
 let sceneRef;
 let myId = null;
 let joined = false;
@@ -120,6 +121,12 @@ function preload() {
 function create() {
     sceneRef = this;
     cursors = this.input.keyboard.createCursorKeys();
+    wasdKeys = this.input.keyboard.addKeys({
+        up: Phaser.Input.Keyboard.KeyCodes.W,
+        left: Phaser.Input.Keyboard.KeyCodes.A,
+        down: Phaser.Input.Keyboard.KeyCodes.S,
+        right: Phaser.Input.Keyboard.KeyCodes.D
+    });
 
     socket.on("init", (data) => {
         players = data.players || {};
@@ -783,10 +790,10 @@ function update() {
     let moveX = 0;
     let moveY = 0;
 
-    if (cursors.left.isDown) moveX -= 1;
-    if (cursors.right.isDown) moveX += 1;
-    if (cursors.up.isDown) moveY -= 1;
-    if (cursors.down.isDown) moveY += 1;
+    if (cursors.left.isDown || wasdKeys.left.isDown) moveX -= 1;
+    if (cursors.right.isDown || wasdKeys.right.isDown) moveX += 1;
+    if (cursors.up.isDown || wasdKeys.up.isDown) moveY -= 1;
+    if (cursors.down.isDown || wasdKeys.down.isDown) moveY += 1;
 
     if (joystickActive) {
         moveX += joystickVector.x;
