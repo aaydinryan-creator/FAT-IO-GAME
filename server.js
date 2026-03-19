@@ -254,6 +254,8 @@ function resetModeState(mode) {
         p.lastTagMilestone = 0;
         p.score = 0;
         p.size = START_SIZE;
+        p.announcedFatFook = false;
+        p.announcedScoreFatFook = false;
     }
 }
 
@@ -389,7 +391,7 @@ function maybeStartTagEvent() {
     gameState.tagEvent.endsAt = Date.now() + TAG_EVENT_DURATION_MS;
     gameState.tagEvent.milestone = milestone * TAG_SCORE_STEP;
 
-    emitAnnouncement(`${leader.username.toUpperCase()} IS A FAT FOOOOK HIDE`, {
+    emitAnnouncement(`HIDE FROM ${leader.username.toUpperCase()} IT'S A FOOT FOOOK`, {
         flash: true,
         shake: true,
         burp: true,
@@ -433,6 +435,34 @@ function updateNormalFatFookStates() {
     gameState.music.startedAt = 0;
 }
 
+function announceSizeFatFooks() {
+    if (currentMode !== "normal") return;
+
+    for (const id of Object.keys(players)) {
+        const p = players[id];
+        if (!p) continue;
+
+        if (p.size >= WHALE_SIZE && !p.announcedFatFook) {
+            p.announcedFatFook = true;
+
+            emitAnnouncement(`${p.username.toUpperCase()} IS A FOOT FOOOK`, {
+                flash: true,
+                shake: true,
+                burp: true,
+                flashColor: "rgba(255, 214, 80, 0.22)",
+                flashDuration: 260,
+                shakeDuration: 260,
+                shakeIntensity: 0.01,
+                burpVolume: 0.9
+            });
+        }
+
+        if (p.size < WHALE_SIZE) {
+            p.announcedFatFook = false;
+        }
+    }
+}
+
 function beginInfectedCountdown() {
     gameState.infected.phase = "countdown";
     gameState.infected.countdownEndsAt = Date.now() + INFECTED_COUNTDOWN_MS;
@@ -448,6 +478,8 @@ function beginInfectedCountdown() {
         p.isFatFook = false;
         p.score = 0;
         p.size = START_SIZE;
+        p.announcedFatFook = false;
+        p.announcedScoreFatFook = false;
         randomSpawnPlayer(p);
     }
 
@@ -475,6 +507,8 @@ function startInfectedRound() {
         p.isFatFook = false;
         p.score = 0;
         p.size = START_SIZE;
+        p.announcedFatFook = false;
+        p.announcedScoreFatFook = false;
         randomSpawnPlayer(p);
     }
 
@@ -595,6 +629,8 @@ function updateInfectedMode() {
             players[id].isFatFook = false;
             players[id].score = 0;
             players[id].size = START_SIZE;
+            players[id].announcedFatFook = false;
+            players[id].announcedScoreFatFook = false;
         }
         return;
     }
@@ -684,7 +720,9 @@ io.on("connection", (socket) => {
             avatarData,
             infected: false,
             isFatFook: false,
-            lastTagMilestone: 0
+            lastTagMilestone: 0,
+            announcedFatFook: false,
+            announcedScoreFatFook: false
         };
 
         if (currentMode === "infected" && gameState.infected.phase === "active") {
@@ -692,6 +730,8 @@ io.on("connection", (socket) => {
             players[socket.id].size = START_SIZE;
             players[socket.id].infected = false;
             players[socket.id].isFatFook = false;
+            players[socket.id].announcedFatFook = false;
+            players[socket.id].announcedScoreFatFook = false;
         }
 
         socket.emit("init", {
@@ -780,6 +820,7 @@ setInterval(() => {
         maybeStartTagEvent();
         maybeEndTagEvent();
         updateNormalFatFookStates();
+        announceSizeFatFooks();
     } else if (currentMode === "infected") {
         updateInfectedMode();
 

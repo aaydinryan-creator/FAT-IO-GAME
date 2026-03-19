@@ -138,6 +138,8 @@ respawnBtn.addEventListener("click", () => {
 
 usernameInput.addEventListener("input", updatePreview);
 usernameInput.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+
     if (e.key === "Enter") {
         joinFromMenu();
     }
@@ -668,9 +670,20 @@ function createChatUI() {
     });
 
     chatInput.addEventListener("keydown", (e) => {
+        e.stopPropagation();
+
+        if (e.key === "Escape") {
+            chatPanel.style.display = "none";
+            chatToggleBtn.textContent = "CHAT";
+            chatInput.blur();
+            return;
+        }
+
         if (e.key !== "Enter") return;
+
         const text = chatInput.value.trim();
         if (!text) return;
+
         socket.emit("chatMessage", { text });
         chatInput.value = "";
     });
@@ -1627,12 +1640,33 @@ function update() {
     const me = players[myId];
     if (!me) return;
 
+    const active = document.activeElement;
+    const typingInInput =
+        active === usernameInput ||
+        active === chatInput ||
+        (active && (
+            active.tagName === "INPUT" ||
+            active.tagName === "TEXTAREA" ||
+            active.isContentEditable
+        ));
+
+    if (typingInInput) {
+        syncPlayers();
+        updateCamera();
+        updateModeBadge();
+        updateInfectedOverlay();
+        return;
+    }
+
     let speed = 10 / (1 + me.size / 60);
     if (speed < 1.9) speed = 1.9;
 
     if (gameState.mode === "infected") {
-        if (me.infected) speed += 0.55;
-        else speed += 0.15;
+        if (me.infected) {
+            speed += 0.55;
+        } else {
+            speed += 0.15;
+        }
     } else if (gameState.tagEvent?.active && gameState.tagEvent.leaderId === myId) {
         speed += 0.7;
     }
@@ -1651,6 +1685,7 @@ function update() {
     }
 
     const length = Math.sqrt(moveX * moveX + moveY * moveY);
+
     if (length > 0) {
         moveX /= length;
         moveY /= length;
