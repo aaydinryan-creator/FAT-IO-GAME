@@ -1,4 +1,4 @@
-const socket = io();
+const socket = io("https://fat-io-game.onrender.com");
 
 let players = {};
 let food = [];
