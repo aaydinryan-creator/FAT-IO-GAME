@@ -18,11 +18,12 @@ let selectedColor = "#ffcc4d";
 
 let worldWidth = 2400;
 let worldHeight = 1400;
-let whaleSize = 180;
+let whaleSize = 300;
 let whaleAnnounced = false;
 let toastTimer = null;
 let worldBuilt = false;
 let scoreBadge;
+let flashEl = null;
 
 let joystickActive = false;
 let joystickTouchId = null;
@@ -38,6 +39,30 @@ const audioTracks = {
     normal: "/audio/eat.mp3",
     whale: "/audio/fat.mp3"
 };
+
+const burgerToasts = [
+    "BURGER TIMEEE",
+    "YOU ATE THAT MAN",
+    "COMBO MEAL SECURED",
+    "BIG BACK BEHAVIOR",
+    "ABSOLUTE DRIVE THRU VIOLENCE"
+];
+
+const whaleToasts = [
+    "FAT WEIRD AL MODE",
+    "THE SONG HAS CLAIMED YOU",
+    "YOU ARE NOW A PROBLEM",
+    "BOSS MUSIC ACTIVATED",
+    "FULL GREASE ASCENSION"
+];
+
+const backToNormalToasts = [
+    "BACK TO REGULAR FAT",
+    "WEIRD AL POWERS FADING",
+    "YOU ARE LESS THREATENING NOW",
+    "BOSS MUSIC OFF",
+    "NORMAL BULK RESTORED"
+];
 
 const menu = document.getElementById("menu");
 const menuFoodBg = document.getElementById("menuFoodBg");
@@ -62,6 +87,7 @@ buildMenuFoodBackground();
 setupJoystick();
 setupCustomizationControls();
 updatePreview();
+createFlashOverlay();
 
 playBtn.addEventListener("click", joinFromMenu);
 
@@ -181,6 +207,8 @@ function create() {
         resetJoystick();
         stopLoop();
         playBurpFallback(0.7);
+        flashScreen("rgba(170, 0, 0, 0.35)", 160);
+        shakeCamera(130, 0.009);
         showToast("DAMN YOU ARE FAT");
         deathText.textContent = `${data.by || "Somebody"} turned you into a combo meal.`;
         deathScreen.style.display = "flex";
@@ -188,7 +216,8 @@ function create() {
     });
 
     socket.on("burgerTime", () => {
-        showToast("BURGER TIMEEE");
+        showToast(randomFrom(burgerToasts));
+        shakeCamera(80, 0.003);
     });
 }
 
@@ -233,6 +262,36 @@ function updatePreview() {
     previewFace.textContent = selectedFace;
     previewAccessory.textContent = selectedAccessory === "none" ? "" : selectedAccessory;
     previewName.textContent = name;
+}
+
+function createFlashOverlay() {
+    flashEl = document.createElement("div");
+    flashEl.style.position = "absolute";
+    flashEl.style.inset = "0";
+    flashEl.style.pointerEvents = "none";
+    flashEl.style.opacity = "0";
+    flashEl.style.transition = "opacity 140ms ease";
+    flashEl.style.zIndex = "17";
+    document.body.appendChild(flashEl);
+}
+
+function flashScreen(color = "rgba(255, 225, 120, 0.26)", duration = 150) {
+    if (!flashEl) return;
+    flashEl.style.background = color;
+    flashEl.style.opacity = "1";
+
+    setTimeout(() => {
+        if (flashEl) flashEl.style.opacity = "0";
+    }, duration);
+}
+
+function shakeCamera(duration = 140, intensity = 0.004) {
+    if (!sceneRef || !sceneRef.cameras || !sceneRef.cameras.main) return;
+    sceneRef.cameras.main.shake(duration, intensity);
+}
+
+function randomFrom(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
 }
 
 function unlockAudio() {
@@ -308,7 +367,7 @@ function joinFromMenu() {
 
     unlockAudio();
     whaleAnnounced = false;
-    playLoop("normal", 0.45);
+    playLoop("normal", 0.42);
 
     socket.emit("joinGame", {
         username,
@@ -462,8 +521,8 @@ function clearAllSprites() {
 
 function getDefaultFaceBySize(size) {
     if (size < 50) return "😐";
-    if (size < 80) return "🙂";
-    if (size < 120) return "😋";
+    if (size < 90) return "🙂";
+    if (size < 150) return "😋";
     if (size < whaleSize) return "🥴";
     return "😵";
 }
@@ -574,11 +633,14 @@ function syncPlayers() {
         playerSprites[id].body.setFillStyle(bodyColor);
 
         if (isWhaleMode) {
-            playerSprites[id].face.setDisplaySize(fontSize * 1.15, fontSize * 1.15);
-            playerSprites[id].face.setAngle(0);
+            const pulse = id === myId ? 1 + Math.sin(Date.now() / 90) * 0.04 : 1;
+            playerSprites[id].face.setDisplaySize(fontSize * 1.18 * pulse, fontSize * 1.18 * pulse);
+            playerSprites[id].face.setAngle(id === myId ? Math.sin(Date.now() / 120) * 3 : 0);
+            playerSprites[id].body.setStrokeStyle(6, 0xffd54a, 0.85);
         } else {
             playerSprites[id].face.setText(faceText);
             playerSprites[id].face.setFontSize(fontSize);
+            playerSprites[id].body.setStrokeStyle(4, 0x000000, 0.25);
         }
 
         playerSprites[id].hat.x = fx;
@@ -598,19 +660,26 @@ function syncPlayers() {
         playerSprites[id].crown.x = fx;
         playerSprites[id].crown.y = fy - (fontSize * 1.30);
         playerSprites[id].crown.setVisible(id === leaderId);
+        if (id === leaderId) {
+            playerSprites[id].crown.setScale(1 + Math.sin(Date.now() / 180) * 0.06);
+        } else {
+            playerSprites[id].crown.setScale(1);
+        }
     }
 
     const me = players[myId];
     if (me && me.size >= whaleSize && !whaleAnnounced) {
         whaleAnnounced = true;
         playLoop("whale", 0.75);
-        showToast("FAT WEIRD AL MODE");
+        flashScreen("rgba(255, 225, 120, 0.35)", 180);
+        shakeCamera(220, 0.0085);
+        showToast(randomFrom(whaleToasts));
     }
 
     if (me && me.size < whaleSize && whaleAnnounced) {
         whaleAnnounced = false;
-        playLoop("normal", 0.45);
-        showToast("BACK TO REGULAR FAT");
+        playLoop("normal", 0.42);
+        showToast(randomFrom(backToNormalToasts));
     }
 }
 
@@ -672,11 +741,16 @@ function renderLeaderboard() {
 function updateScoreBadge() {
     const me = players[myId];
     if (!me) {
-        scoreBadge.textContent = "Score: 0 | Size: 30";
+        scoreBadge.innerHTML = `Score: 0 | Size: 30<br><span style="font-size:12px;opacity:.9;">Need ${whaleSize - 30} more for Weird Al Mode</span>`;
         return;
     }
 
-    scoreBadge.textContent = `Score: ${Math.floor(me.score)} | Size: ${Math.floor(me.size)}`;
+    const remaining = Math.max(0, whaleSize - Math.floor(me.size));
+    const modeText = me.size >= whaleSize
+        ? `WEIRD AL MODE ACTIVE`
+        : `Need ${remaining} more size for Weird Al Mode`;
+
+    scoreBadge.innerHTML = `Score: ${Math.floor(me.score)} | Size: ${Math.floor(me.size)}<br><span style="font-size:12px;opacity:.92;">${modeText}</span>`;
 }
 
 function showToast(text) {

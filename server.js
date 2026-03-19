@@ -4,7 +4,6 @@ const app = express();
 const http = require("http").createServer(app);
 const { Server } = require("socket.io");
 
-// ✅ ALLOW EVERYTHING (fixes your issue instantly)
 app.use(cors());
 
 const io = new Server(http, {
@@ -18,10 +17,10 @@ app.use(express.static("public"));
 
 const WORLD_WIDTH = 2400;
 const WORLD_HEIGHT = 1400;
-const FOOD_COUNT = 85;
+const FOOD_COUNT = 78;
 const START_SIZE = 30;
-const WHALE_SIZE = 180;
-const SCORE_KILL_ADVANTAGE = 3;
+const WHALE_SIZE = 300;
+const SCORE_KILL_ADVANTAGE = 8;
 
 const ALLOWED_HATS = new Set(["🧢", "🎩", "🎓", "👒"]);
 const ALLOWED_COLORS = new Set(["#ffcc4d", "#ff7b7b", "#7bdcff", "#8cff98", "#d59cff", "#ffffff"]);
@@ -117,8 +116,8 @@ function eatPlayer(bigId, smallId) {
     const small = players[smallId];
     if (!big || !small) return false;
 
-    big.size += Math.max(10, Math.floor(small.size * 0.35));
-    big.score += Math.max(20, Math.floor(small.score * 0.4) + 10);
+    big.size += Math.max(12, Math.floor(small.size * 0.28));
+    big.score += Math.max(18, Math.floor(small.score * 0.35) + 12);
 
     io.to(smallId).emit("eliminated", {
         by: big.username
@@ -136,7 +135,7 @@ function processFoodForPlayer(playerId) {
     const me = players[playerId];
     if (!me) return;
 
-    const foodEatRadius = Math.min(48, 20 + Math.sqrt(me.size) * 1.8);
+    const foodEatRadius = Math.min(44, 18 + Math.sqrt(me.size) * 1.55);
 
     for (let i = food.length - 1; i >= 0; i--) {
         const f = food[i];
@@ -170,7 +169,7 @@ function processPlayerCollisions() {
 
             const aRadius = getBodyRadius(a.size);
             const bRadius = getBodyRadius(b.size);
-            const overlapNeeded = 10;
+            const overlapNeeded = 12;
 
             const touchingEnough = dist < (aRadius + bRadius - overlapNeeded);
 
