@@ -521,10 +521,13 @@ function renderLeaderboard() {
     const rows = leaderboard.length
         ? leaderboard.map((p, index) => {
             const badge = index === 0 ? "👑 " : "";
+            const dot = p.color
+                ? `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${p.color};margin-right:8px;vertical-align:middle;border:1px solid rgba(0,0,0,0.25);"></span>`
+                : "";
             return `
                 <div class="lb-row">
                     <div class="lb-rank">${index + 1}</div>
-                    <div class="lb-name">${badge}${escapeHtml(p.username)}</div>
+                    <div class="lb-name">${dot}${badge}${escapeHtml(p.username)}</div>
                     <div class="lb-score">${Math.floor(p.score)}</div>
                 </div>
             `;

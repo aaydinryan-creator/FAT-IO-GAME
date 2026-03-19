@@ -10,8 +10,6 @@ const WORLD_HEIGHT = 1400;
 const FOOD_COUNT = 85;
 const START_SIZE = 30;
 const WHALE_SIZE = 180;
-
-// lower this if you want easier kills
 const SCORE_KILL_ADVANTAGE = 3;
 
 const ALLOWED_HATS = new Set(["🧢", "🎩", "🎓", "👒"]);
@@ -77,7 +75,8 @@ function getLeaderboard() {
             id,
             username: p.username,
             score: p.score,
-            size: p.size
+            size: p.size,
+            color: p.color
         }))
         .sort((a, b) => b.score - a.score)
         .slice(0, 8);
@@ -138,7 +137,6 @@ function processFoodForPlayer(playerId) {
     }
 }
 
-// this matches your frontend body circle much better
 function getBodyRadius(size) {
     const fontSize = Math.min(138, 28 + size * 0.34);
     return Math.max(22, fontSize * 0.52);
@@ -161,9 +159,8 @@ function processPlayerCollisions() {
 
             const aRadius = getBodyRadius(a.size);
             const bRadius = getBodyRadius(b.size);
-
-            // if circles visibly overlap, this should trigger
             const overlapNeeded = 10;
+
             const touchingEnough = dist < (aRadius + bRadius - overlapNeeded);
 
             const aCanEatB = a.score >= b.score + SCORE_KILL_ADVANTAGE;
@@ -258,6 +255,8 @@ setInterval(() => {
     emitWorld();
 }, 1000 / 20);
 
-http.listen(3000, () => {
-    console.log("Server running on http://localhost:3000");
+const PORT = process.env.PORT || 3000;
+
+http.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
