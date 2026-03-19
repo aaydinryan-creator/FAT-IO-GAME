@@ -4,21 +4,12 @@ const app = express();
 const http = require("http").createServer(app);
 const { Server } = require("socket.io");
 
-const allowedOrigins = [
-    "https://glittery-beijinho-f984e2.netlify.app",
-    "https://fat-io-game.onrender.com",
-    "http://localhost:3000",
-    "http://127.0.0.1:5500"
-];
-
-app.use(cors({
-    origin: allowedOrigins,
-    methods: ["GET", "POST"]
-}));
+// ✅ ALLOW EVERYTHING (fixes your issue instantly)
+app.use(cors());
 
 const io = new Server(http, {
     cors: {
-        origin: allowedOrigins,
+        origin: "*",
         methods: ["GET", "POST"]
     }
 });
