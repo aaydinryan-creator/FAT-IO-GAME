@@ -29,11 +29,15 @@ let joystickTouchId = null;
 let joystickVector = { x: 0, y: 0 };
 const joystickMaxRadius = 42;
 
-// AUDIO - no files needed
+// AUDIO
 let audioUnlocked = false;
-let audioCtx = null;
-let musicInterval = null;
-let currentMusicPattern = 0;
+let currentLoop = null;
+let currentLoopName = null;
+
+const audioTracks = {
+    normal: "/audio/eat.mp3",
+    whale: "/audio/fat.mp3"
+};
 
 const menu = document.getElementById("menu");
 const menuFoodBg = document.getElementById("menuFoodBg");
@@ -83,7 +87,9 @@ const config = {
 
 new Phaser.Game(config);
 
-function preload() {}
+function preload() {
+    this.load.image("weirdAl", "/images/weirdal.png");
+}
 
 function create() {
     sceneRef = this;
@@ -171,8 +177,10 @@ function create() {
 
     socket.on("eliminated", (data) => {
         joined = false;
+        whaleAnnounced = false;
         resetJoystick();
-        playSfx("burp", 0.7);
+        stopLoop();
+        playBurpFallback(0.7);
         showToast("DAMN YOU ARE FAT");
         deathText.textContent = `${data.by || "Somebody"} turned you into a combo meal.`;
         deathScreen.style.display = "flex";
@@ -180,7 +188,6 @@ function create() {
     });
 
     socket.on("burgerTime", () => {
-        playSfx("eat", 0.45);
         showToast("BURGER TIMEEE");
     });
 }
@@ -228,199 +235,80 @@ function updatePreview() {
     previewName.textContent = name;
 }
 
-// AUDIO HELPERS
 function unlockAudio() {
     if (audioUnlocked) return;
     audioUnlocked = true;
-
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (AudioContextClass) {
-        audioCtx = new AudioContextClass();
-        if (audioCtx.state === "suspended") {
-            audioCtx.resume().catch(() => {});
-        }
-    }
 }
 
-function speakFunnyLine(text) {
+function playLoop(name, volume = 0.5) {
     if (!audioUnlocked) return;
-    if (!("speechSynthesis" in window)) return;
 
+    const src = audioTracks[name];
+    if (!src) return;
+
+    if (currentLoop && currentLoopName === name) {
+        return;
+    }
+
+    stopLoop();
+
+    currentLoop = new Audio(src);
+    currentLoop.loop = true;
+    currentLoop.volume = volume;
+    currentLoopName = name;
+
+    currentLoop.play().catch((err) => {
+        console.log(`Failed to play loop "${name}"`, err);
+    });
+}
+
+function stopLoop() {
+    if (!currentLoop) return;
+    currentLoop.pause();
+    currentLoop.currentTime = 0;
+    currentLoop = null;
+    currentLoopName = null;
+}
+
+function playBurpFallback(volume = 0.6) {
     try {
-        window.speechSynthesis.cancel();
-        const utter = new SpeechSynthesisUtterance(text);
-        utter.rate = 0.95;
-        utter.pitch = 0.7;
-        utter.volume = 0.9;
-        window.speechSynthesis.speak(utter);
-    } catch (e) {}
-}
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
 
-function playTone(freq = 440, duration = 0.12, type = "sine", volume = 0.05, startAt = 0) {
-    if (!audioCtx) return;
+        const ctx = new AudioContextClass();
+        const now = ctx.currentTime;
 
-    const now = audioCtx.currentTime + startAt;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
 
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, now);
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(180, now);
+        osc.frequency.exponentialRampToValueAtTime(70, now + 0.35);
 
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(volume, now + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.08 * volume, now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
 
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
 
-    osc.start(now);
-    osc.stop(now + duration + 0.02);
-}
+        osc.start(now);
+        osc.stop(now + 0.4);
 
-function playSlideTone(freqStart = 300, freqEnd = 120, duration = 0.3, type = "sawtooth", volume = 0.06) {
-    if (!audioCtx) return;
-
-    const now = audioCtx.currentTime;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-
-    osc.type = type;
-    osc.frequency.setValueAtTime(freqStart, now);
-    osc.frequency.exponentialRampToValueAtTime(Math.max(40, freqEnd), now + duration);
-
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(volume, now + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-
-    osc.start(now);
-    osc.stop(now + duration + 0.03);
-}
-
-function playNoiseBurp() {
-    if (!audioCtx) return;
-
-    const bufferSize = audioCtx.sampleRate * 0.22;
-    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-    const output = buffer.getChannelData(0);
-
-    for (let i = 0; i < bufferSize; i++) {
-        output[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+        setTimeout(() => {
+            ctx.close().catch(() => {});
+        }, 500);
+    } catch (e) {
+        console.log("Burp fallback failed", e);
     }
-
-    const noise = audioCtx.createBufferSource();
-    const filter = audioCtx.createBiquadFilter();
-    const gain = audioCtx.createGain();
-
-    noise.buffer = buffer;
-    filter.type = "lowpass";
-    filter.frequency.value = 220;
-    gain.gain.value = 0.09;
-
-    noise.connect(filter);
-    filter.connect(gain);
-    gain.connect(audioCtx.destination);
-
-    noise.start();
-
-    playSlideTone(180, 70, 0.33, "sawtooth", 0.08);
-}
-
-function playEatSound(volume = 0.5) {
-    playTone(740, 0.06, "square", 0.03 * volume, 0);
-    playTone(980, 0.06, "square", 0.025 * volume, 0.07);
-    playTone(1240, 0.08, "triangle", 0.02 * volume, 0.13);
-}
-
-function playBurpSound(volume = 0.7) {
-    playNoiseBurp();
-    playSlideTone(240, 85, 0.38, "sawtooth", 0.08 * volume);
-}
-
-function playFatVoiceSound() {
-    speakFunnyLine("because I'm fat");
-}
-
-function playWhaleVoiceSound() {
-    speakFunnyLine("wow I am fat");
-}
-
-function playSfx(name, volume = 0.6) {
-    if (!audioUnlocked) return;
-
-    if (audioCtx && audioCtx.state === "suspended") {
-        audioCtx.resume().catch(() => {});
-    }
-
-    switch (name) {
-        case "eat":
-            playEatSound(volume);
-            break;
-        case "burp":
-            playBurpSound(volume);
-            break;
-        case "fatVoice":
-            playFatVoiceSound();
-            break;
-        case "whaleVoice":
-            playWhaleVoiceSound();
-            break;
-    }
-}
-
-function playMusicPatternA() {
-    const notes = [196, 246.94, 293.66, 246.94, 196, 246.94, 329.63, 246.94];
-    notes.forEach((note, i) => {
-        playTone(note, 0.18, "triangle", 0.018, i * 0.24);
-        playTone(note / 2, 0.16, "sine", 0.01, i * 0.24);
-    });
-}
-
-function playMusicPatternB() {
-    const notes = [164.81, 220, 261.63, 220, 174.61, 220, 293.66, 220];
-    notes.forEach((note, i) => {
-        playTone(note, 0.18, "triangle", 0.018, i * 0.24);
-        playTone(note / 2, 0.16, "sine", 0.01, i * 0.24);
-    });
-}
-
-function playMusicPatternC() {
-    const notes = [220, 277.18, 329.63, 277.18, 246.94, 293.66, 369.99, 293.66];
-    notes.forEach((note, i) => {
-        playTone(note, 0.18, "triangle", 0.018, i * 0.24);
-        playTone(note / 2, 0.16, "sine", 0.01, i * 0.24);
-    });
-}
-
-function playMusic() {
-    if (!audioUnlocked || !audioCtx) return;
-    if (musicInterval) return;
-
-    const playCurrentPattern = () => {
-        if (currentMusicPattern === 0) playMusicPatternA();
-        if (currentMusicPattern === 1) playMusicPatternB();
-        if (currentMusicPattern === 2) playMusicPatternC();
-        currentMusicPattern = (currentMusicPattern + 1) % 3;
-    };
-
-    playCurrentPattern();
-    musicInterval = setInterval(playCurrentPattern, 2100);
-}
-
-function stopMusic() {
-    if (!musicInterval) return;
-    clearInterval(musicInterval);
-    musicInterval = null;
 }
 
 function joinFromMenu() {
     const username = usernameInput.value.trim() || "PLAYER";
 
     unlockAudio();
-    playMusic();
-    playSfx("eat", 0.5);
+    whaleAnnounced = false;
+    playLoop("normal", 0.45);
 
     socket.emit("joinGame", {
         username,
@@ -549,14 +437,20 @@ function buildWorld() {
     }
 }
 
+function clearSpriteParts(sprite) {
+    if (!sprite) return;
+
+    if (sprite.body) sprite.body.destroy();
+    if (sprite.face) sprite.face.destroy();
+    if (sprite.hat) sprite.hat.destroy();
+    if (sprite.name) sprite.name.destroy();
+    if (sprite.crown) sprite.crown.destroy();
+    if (sprite.accessory) sprite.accessory.destroy();
+}
+
 function clearAllSprites() {
     for (const id in playerSprites) {
-        playerSprites[id].body.destroy();
-        playerSprites[id].face.destroy();
-        playerSprites[id].hat.destroy();
-        playerSprites[id].name.destroy();
-        playerSprites[id].crown.destroy();
-        playerSprites[id].accessory.destroy();
+        clearSpriteParts(playerSprites[id]);
     }
     playerSprites = {};
 
@@ -571,11 +465,11 @@ function getDefaultFaceBySize(size) {
     if (size < 80) return "🙂";
     if (size < 120) return "😋";
     if (size < whaleSize) return "🥴";
-    return "🐳";
+    return "😵";
 }
 
 function getRenderedFace(player) {
-    if (player.size >= whaleSize) return "🐳";
+    if (player.size >= whaleSize) return "😵";
     return player.face || getDefaultFaceBySize(player.size);
 }
 
@@ -583,43 +477,67 @@ function getVisualFontSize(size) {
     return Math.min(138, 28 + size * 0.34);
 }
 
+function createFaceSprite(x, y, isWhaleMode, faceText, fontSize) {
+    if (isWhaleMode) {
+        return sceneRef.add.image(x, y, "weirdAl").setOrigin(0.5);
+    }
+
+    return sceneRef.add.text(x, y, faceText, {
+        fontSize: fontSize + "px"
+    }).setOrigin(0.5);
+}
+
+function rebuildFaceSpriteIfNeeded(id, p, isWhaleMode, faceText, fontSize) {
+    const sprite = playerSprites[id];
+    if (!sprite) return;
+
+    const currentMode = sprite.faceMode || "normal";
+    const neededMode = isWhaleMode ? "whale" : "normal";
+
+    if (currentMode !== neededMode) {
+        const oldX = sprite.face.x;
+        const oldY = sprite.face.y;
+        sprite.face.destroy();
+        sprite.face = createFaceSprite(oldX, oldY, isWhaleMode, faceText, fontSize);
+        sprite.faceMode = neededMode;
+    }
+}
+
 function syncPlayers() {
     for (const id in playerSprites) {
         if (!players[id]) {
-            playerSprites[id].body.destroy();
-            playerSprites[id].face.destroy();
-            playerSprites[id].hat.destroy();
-            playerSprites[id].name.destroy();
-            playerSprites[id].crown.destroy();
-            playerSprites[id].accessory.destroy();
+            clearSpriteParts(playerSprites[id]);
             delete playerSprites[id];
         }
     }
 
     for (const id in players) {
         const p = players[id];
+        const isWhaleMode = p.size >= whaleSize;
         const fontSize = getVisualFontSize(p.size);
         const faceText = getRenderedFace(p);
         const bodyRadius = Math.max(22, fontSize * 0.52);
         const bodyColor = Phaser.Display.Color.HexStringToColor(p.color || "#ffcc4d").color;
-        const accessoryText = p.accessory && p.accessory !== "none" ? p.accessory : "";
+        const accessoryText = isWhaleMode
+            ? ""
+            : (p.accessory && p.accessory !== "none" ? p.accessory : "");
 
         if (!playerSprites[id]) {
             playerSprites[id] = {
+                faceMode: isWhaleMode ? "whale" : "normal",
+
                 crown: sceneRef.add.text(p.x, p.y - 72, "👑", {
                     fontSize: "34px"
                 }).setOrigin(0.5),
 
-                hat: sceneRef.add.text(p.x, p.y - 38, p.hat || "🧢", {
+                hat: sceneRef.add.text(p.x, p.y - 38, isWhaleMode ? "" : (p.hat || "🧢"), {
                     fontSize: Math.max(24, fontSize * 0.45) + "px"
                 }).setOrigin(0.5),
 
                 body: sceneRef.add.circle(p.x, p.y, bodyRadius, bodyColor)
                     .setStrokeStyle(4, 0x000000, 0.25),
 
-                face: sceneRef.add.text(p.x, p.y, faceText, {
-                    fontSize: fontSize + "px"
-                }).setOrigin(0.5),
+                face: createFaceSprite(p.x, p.y, isWhaleMode, faceText, fontSize),
 
                 accessory: sceneRef.add.text(p.x, p.y + 8, accessoryText, {
                     fontSize: Math.max(18, fontSize * 0.34) + "px"
@@ -634,6 +552,8 @@ function syncPlayers() {
                 }).setOrigin(0.5)
             };
         }
+
+        rebuildFaceSpriteIfNeeded(id, p, isWhaleMode, faceText, fontSize);
 
         if (id === myId) {
             playerSprites[id].body.x = p.x;
@@ -653,12 +573,17 @@ function syncPlayers() {
         playerSprites[id].body.setRadius(bodyRadius);
         playerSprites[id].body.setFillStyle(bodyColor);
 
-        playerSprites[id].face.setText(faceText);
-        playerSprites[id].face.setFontSize(fontSize);
+        if (isWhaleMode) {
+            playerSprites[id].face.setDisplaySize(fontSize * 1.15, fontSize * 1.15);
+            playerSprites[id].face.setAngle(0);
+        } else {
+            playerSprites[id].face.setText(faceText);
+            playerSprites[id].face.setFontSize(fontSize);
+        }
 
         playerSprites[id].hat.x = fx;
         playerSprites[id].hat.y = fy - (fontSize * 0.80);
-        playerSprites[id].hat.setText(p.hat || "🧢");
+        playerSprites[id].hat.setText(isWhaleMode ? "" : (p.hat || "🧢"));
         playerSprites[id].hat.setFontSize(Math.max(24, fontSize * 0.45));
 
         playerSprites[id].accessory.x = fx;
@@ -678,8 +603,14 @@ function syncPlayers() {
     const me = players[myId];
     if (me && me.size >= whaleSize && !whaleAnnounced) {
         whaleAnnounced = true;
-        playSfx("whaleVoice", 0.9);
-        showToast("WOW I AM FAT");
+        playLoop("whale", 0.75);
+        showToast("FAT WEIRD AL MODE");
+    }
+
+    if (me && me.size < whaleSize && whaleAnnounced) {
+        whaleAnnounced = false;
+        playLoop("normal", 0.45);
+        showToast("BACK TO REGULAR FAT");
     }
 }
 
@@ -718,6 +649,7 @@ function renderLeaderboard() {
             const dot = p.color
                 ? `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${p.color};margin-right:8px;vertical-align:middle;border:1px solid rgba(0,0,0,0.25);"></span>`
                 : "";
+
             return `
                 <div class="lb-row">
                     <div class="lb-rank">${index + 1}</div>
