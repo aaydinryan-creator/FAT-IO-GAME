@@ -128,6 +128,11 @@ function create() {
         right: Phaser.Input.Keyboard.KeyCodes.D
     });
 
+    this.scale.on("resize", (gameSize) => {
+        const { width, height } = gameSize;
+        this.cameras.main.setSize(width, height);
+    });
+
     socket.on("init", (data) => {
         players = data.players || {};
         food = data.food || [];
@@ -158,6 +163,7 @@ function create() {
         syncPlayers();
         renderLeaderboard();
         updateScoreBadge();
+        updateCamera(true);
     });
 
     socket.on("update", (data) => {
@@ -778,6 +784,30 @@ function escapeHtml(text) {
         .replaceAll(">", "&gt;");
 }
 
+function getTargetZoom() {
+    const me = players[myId];
+    if (!me) return 1;
+
+    const isPhoneLike = window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 900;
+
+    let zoom = 1;
+
+    if (isPhoneLike) {
+        zoom = 0.78;
+    } else if (window.innerWidth < 1280) {
+        zoom = 0.9;
+    } else {
+        zoom = 1;
+    }
+
+    if (me.size >= 90) zoom -= 0.05;
+    if (me.size >= 150) zoom -= 0.05;
+    if (me.size >= 220) zoom -= 0.05;
+    if (me.size >= whaleSize) zoom -= 0.06;
+
+    return Phaser.Math.Clamp(zoom, 0.58, 1.02);
+}
+
 function update() {
     if (!joined) return;
 
@@ -818,13 +848,24 @@ function update() {
     updateCamera();
 }
 
-function updateCamera() {
+function updateCamera(forceSnap = false) {
     const me = players[myId];
-    if (!me) return;
+    if (!me || !sceneRef) return;
 
     const cam = sceneRef.cameras.main;
-    const targetX = me.x - cam.width / 2;
-    const targetY = me.y - cam.height / 2;
+    const targetZoom = getTargetZoom();
+
+    if (forceSnap) {
+        cam.setZoom(targetZoom);
+    } else {
+        cam.zoom = Phaser.Math.Linear(cam.zoom, targetZoom, 0.08);
+    }
+
+    const visibleWidth = cam.width / cam.zoom;
+    const visibleHeight = cam.height / cam.zoom;
+
+    const targetX = me.x - visibleWidth / 2;
+    const targetY = me.y - visibleHeight / 2;
 
     cam.scrollX = Phaser.Math.Linear(cam.scrollX, targetX, 0.12);
     cam.scrollY = Phaser.Math.Linear(cam.scrollY, targetY, 0.12);
